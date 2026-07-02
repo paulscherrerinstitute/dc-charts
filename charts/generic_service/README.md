@@ -10,7 +10,7 @@ cron job are all driven from values.
 
 - **Chart API:** `apiVersion: v2`.
 - **Helm:** works unchanged on Helm **3.x** and **4.x** (v2 charts are supported
-  by both; no migration is required for Helm 4).
+  by both. No migration is required for Helm 4).
 - **Kubernetes:** the ingress `apiVersion` is selected automatically from the
   cluster version (`networking.k8s.io/v1` on ≥1.19, falling back to the older
   `v1beta1`/`extensions` groups), so the same chart renders correctly across
@@ -18,7 +18,7 @@ cron job are all driven from values.
 
 ## How it is used at PSI
 
-The chart is generic; each service supplies its own values file (see
+The chart is generic. Each service supplies its own values file (see
 `scicat-ci/helm/configs/<service>/values.yaml`). The CI deploy step points Helm
 at this chart and layers the service values on top, injecting a few
 deploy-time parameters and secrets:
@@ -49,51 +49,51 @@ Uninstall:
 helm delete my-release
 ```
 
-> **Note:** the chart is currently consumed by path from the CI repos. Publishing
-> it as a versioned package to a registry is tracked separately (DATACGRP-792);
-> once published, the install command becomes `helm install my-release <repo>/generic-service-chart`.
+> **Note:** Today the CI repos install this chart from a local path. Publishing it
+> as a versioned package to a registry is separate future work. Once published, the
+> install command becomes `helm install my-release <repo>/generic-service-chart`.
 
 ## Parameters
 
 ### Common
 
-| Parameter          | Description                            | Default |
-| ------------------ | -------------------------------------- | ------- |
-| `nameOverride`     | Partially override the generated name  | `""`    |
-| `fullnameOverride` | Fully override the generated name      | `""`    |
+| Parameter          | Description                           | Default |
+| ------------------ | ------------------------------------- | ------- |
+| `nameOverride`     | Partially override the generated name | `""`    |
+| `fullnameOverride` | Fully override the generated name     | `""`    |
 
 ### Image
 
-| Parameter                  | Description                                          | Default   |
-| -------------------------- | ---------------------------------------------------- | --------- |
-| `image.repository`         | Image name (templated)                               | `busybox` |
-| `image.tag`                | Image tag (templated; defaults to `.Chart.AppVersion`) | `latest`  |
-| `image.pullPolicy`         | Image pull policy                                    | `Always`  |
-| `image.tty`                | Allocate a TTY for the container                     | `nil`     |
-| `image.imagePullSecrets`   | List of image pull secrets                           | `nil`     |
+| Parameter                | Description                                            | Default   |
+| ------------------------ | ------------------------------------------------------ | --------- |
+| `image.repository`       | Image name (templated)                                 | `busybox` |
+| `image.tag`              | Image tag (templated, defaults to `.Chart.AppVersion`) | `latest`  |
+| `image.pullPolicy`       | Image pull policy                                      | `Always`  |
+| `image.tty`              | Allocate a TTY for the container                       | `nil`     |
+| `image.imagePullSecrets` | List of image pull secrets                             | `nil`     |
 
 ### Workload
 
-| Parameter          | Description                                                        | Default |
-| ------------------ | ----------------------------------------------------------------- | ------- |
-| `replicaCount`     | Number of Deployment replicas                                     | `1`     |
-| `strategy`         | Deployment update strategy (k8s `spec.strategy` syntax)           | `nil`   |
-| `affinity`         | Pod affinity/anti-affinity rules                                  | `nil`   |
-| `securityContext`  | Pod security context                                              | `nil`   |
-| `initContainers`   | Init containers (templated; k8s syntax)                           | `nil`   |
-| `run.command`      | Container command (`command:`)                                    | `nil`   |
-| `run.args`         | Container arguments (`args:`)                                     | `nil`   |
-| `env`              | Environment variables (templated; k8s `env` syntax)              | `nil`   |
-| `envFrom`          | Environment sources (templated; k8s `envFrom` syntax)           | `nil`   |
-| `volumes`          | Pod volumes (templated; k8s syntax)                              | `nil`   |
-| `volumeMounts`     | Container volume mounts (templated; k8s syntax)                  | `nil`   |
+| Parameter         | Description                                             | Default |
+| ----------------- | ------------------------------------------------------- | ------- |
+| `replicaCount`    | Number of Deployment replicas                           | `1`     |
+| `strategy`        | Deployment update strategy (k8s `spec.strategy` syntax) | `nil`   |
+| `affinity`        | Pod affinity/anti-affinity rules                        | `nil`   |
+| `securityContext` | Pod security context                                    | `nil`   |
+| `initContainers`  | Init containers (templated, k8s syntax)                 | `nil`   |
+| `run.command`     | Container command (`command:`)                          | `nil`   |
+| `run.args`        | Container arguments (`args:`)                           | `nil`   |
+| `env`             | Environment variables (templated, k8s `env` syntax)     | `nil`   |
+| `envFrom`         | Environment sources (templated, k8s `envFrom` syntax)   | `nil`   |
+| `volumes`         | Pod volumes (templated, k8s syntax)                     | `nil`   |
+| `volumeMounts`    | Container volume mounts (templated, k8s syntax)         | `nil`   |
 
 ### Config maps and secrets
 
-| Parameter    | Description                                                                                       | Default |
-| ------------ | ------------------------------------------------------------------------------------------------ | ------- |
-| `configMaps` | Map of `configMapName -> {key: value, ...}`. Values are templated. e.g. `{cm1: {k1: v1, k2: v2}}` | `{}`    |
-| `secrets`    | Map of `secretName -> {type, data: {key: value, ...}}`. Values must be **base64-encoded** (see [below](#base64-secret-enforcement)) | `{}` |
+| Parameter    | Description                                                                                                                         | Default |
+| ------------ | ----------------------------------------------------------------------------------------------------------------------------------- | ------- |
+| `configMaps` | Map of `configMapName -> {key: value, ...}`. Values are templated. e.g. `{cm1: {k1: v1, k2: v2}}`                                   | `{}`    |
+| `secrets`    | Map of `secretName -> {type, data: {key: value, ...}}`. Values must be **base64-encoded** (see [below](#base64-secret-enforcement)) | `{}`    |
 
 Changing `configMaps` or `secrets` triggers a rolling restart of the Deployment
 automatically — a checksum of both is stored as a pod annotation, so an
@@ -101,20 +101,20 @@ automatically — a checksum of both is stored as a pod annotation, so an
 
 ### Probes
 
-| Parameter            | Description                                            | Default |
-| -------------------- | ----------------------------------------------------- | ------- |
-| `probeChecksEnabled` | Add liveness/readiness probes to the container        | `true`  |
-| `probeChecks`        | Probe tuning merged into both probes (templated)      | `nil`   |
-| `service.probePath`  | HTTP path used by the probes                          | `/`     |
+| Parameter            | Description                                      | Default |
+| -------------------- | ------------------------------------------------ | ------- |
+| `probeChecksEnabled` | Add liveness/readiness probes to the container   | `true`  |
+| `probeChecks`        | Probe tuning merged into both probes (templated) | `nil`   |
+| `service.probePath`  | HTTP path used by the probes                     | `/`     |
 
 ### Storage
 
-| Parameter             | Description                                    | Default            |
-| --------------------- | ---------------------------------------------- | ------------------ |
-| `storage.name`        | PVC name                                        | `<release>-pvc`    |
-| `storage.size`        | Requested storage size (required to enable PVC) | `nil`              |
-| `storage.accessModes` | PVC access mode                                 | `ReadWriteOnce`    |
-| `storage.annotations` | PVC annotations                                 | `nil`              |
+| Parameter             | Description                                     | Default         |
+| --------------------- | ----------------------------------------------- | --------------- |
+| `storage.name`        | PVC name                                        | `<release>-pvc` |
+| `storage.size`        | Requested storage size (required to enable PVC) | `nil`           |
+| `storage.accessModes` | PVC access mode                                 | `ReadWriteOnce` |
+| `storage.annotations` | PVC annotations                                 | `nil`           |
 
 A PersistentVolumeClaim is only rendered when `storage` is set.
 
@@ -130,32 +130,32 @@ A PersistentVolumeClaim is only rendered when `storage` is set.
 
 A single ingress is configured under `ingress`. To create several ingresses for
 the same service (e.g. different annotations per path), provide a list under
-`ingresses` instead; when set, it takes precedence over `ingress`.
+`ingresses` instead. When set, it takes precedence over `ingress`.
 
-| Parameter                | Description                                                                                     | Default    |
-| ------------------------ | ---------------------------------------------------------------------------------------------- | ---------- |
-| `ingress.enabled`        | Create the ingress                                                                             | `false`    |
-| `ingress.name`           | Ingress name                                                                                    | `fullname` |
-| `ingress.className`      | Ingress class                                                                                   | `nil`      |
-| `ingress.annotations`    | Ingress annotations. Keys prefixed with `b64/` are base64-decoded at render (see [below](#base64-annotations)) | `{}` |
-| `ingress.hosts[].host`   | Host (templated)                                                                                | `nil`      |
-| `ingress.hosts[].paths[].path` / `.pathType` | Path and path type                                                          | `/`        |
-| `ingress.tls[].hosts[]`  | Hosts covered by a TLS cert (templated)                                                        | `nil`      |
-| `ingress.tls[].secretName` | Secret holding the TLS cert (templated)                                                       | `nil`      |
-| `ingresses`              | List of ingress objects (same shape as `ingress`); overrides `ingress` when present            | `nil`      |
+| Parameter                                    | Description                                                                                                    | Default    |
+| -------------------------------------------- | -------------------------------------------------------------------------------------------------------------- | ---------- |
+| `ingress.enabled`                            | Create the ingress                                                                                             | `false`    |
+| `ingress.name`                               | Ingress name                                                                                                   | `fullname` |
+| `ingress.className`                          | Ingress class                                                                                                  | `nil`      |
+| `ingress.annotations`                        | Ingress annotations. Keys prefixed with `b64/` are base64-decoded at render (see [below](#base64-annotations)) | `{}`       |
+| `ingress.hosts[].host`                       | Host (templated)                                                                                               | `nil`      |
+| `ingress.hosts[].paths[].path` / `.pathType` | Path and path type                                                                                             | `/`        |
+| `ingress.tls[].hosts[]`                      | Hosts covered by a TLS cert (templated)                                                                        | `nil`      |
+| `ingress.tls[].secretName`                   | Secret holding the TLS cert (templated)                                                                        | `nil`      |
+| `ingresses`                                  | List of ingress objects (same shape as `ingress`), overrides `ingress` when present                            | `nil`      |
 
 ### Jobs and cron jobs
 
-| Parameter          | Description                                                                        | Default |
-| ------------------ | --------------------------------------------------------------------------------- | ------- |
-| `jobContainers`    | List of containers (templated, k8s syntax) to run as a Job. Enables the job stack | `nil`   |
-| `jobFromCronJob`   | Run the job by triggering a paused CronJob via RBAC (see [below](#jobs))           | `true`  |
+| Parameter        | Description                                                                       | Default |
+| ---------------- | --------------------------------------------------------------------------------- | ------- |
+| `jobContainers`  | List of containers (templated, k8s syntax) to run as a Job. Enables the job stack | `nil`   |
+| `jobFromCronJob` | Run the job by triggering a paused CronJob via RBAC (see [below](#jobs))          | `true`  |
 
 ### Tests
 
-| Parameter | Description                                                          | Default |
-| --------- | ------------------------------------------------------------------- | ------- |
-| `test`    | Pod spec (templated) run by `helm test`. k8s Pod `spec` syntax      | `nil`   |
+| Parameter | Description                                                    | Default |
+| --------- | -------------------------------------------------------------- | ------- |
+| `test`    | Pod spec (templated) run by `helm test`. k8s Pod `spec` syntax | `nil`   |
 
 ## Key behaviors
 
@@ -180,7 +180,7 @@ env:
 
 ### base64 secret enforcement
 
-Values under `secrets.<name>.data` must already be base64-encoded; the chart
+Values under `secrets.<name>.data` must already be base64-encoded. The chart
 validates this (`validateSecret`) and fails the render with
 *"Please b64 encode your secrets!"* otherwise. This keeps plaintext out of the
 rendered manifests and matches how secrets are injected from CI.
@@ -276,7 +276,7 @@ Either `kubectl scale`, or upgrade with a new `replicaCount`.
 ## Maintaining the chart
 
 - Bump `version` in `Chart.yaml` (SemVer) on every change to the chart or its
-  templates; consumers pin to a version once the chart is published.
+  templates. Consumers pin to a version once the chart is published.
 - The chart targets Helm v2 chart API and needs no changes for Helm 4. When the
   CI runners move to Helm 4, this chart is expected to render and deploy
   identically — validate with `helm lint` and a `helm template` diff before/after.
