@@ -1,6 +1,7 @@
-# Default values for search-api.
+# Default values for generic-service-chart.
 # This is a YAML-formatted file.
 # Declare variables to be passed into your templates.
+# See README.md for the full list of configurable parameters.
 
 replicaCount: 1
 
