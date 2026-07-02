@@ -1,0 +1,116 @@
+# proposals-cronjob-chart
+
+Deploys the **DUO proposal sync** as one Kubernetes CronJob per PSI facility.
+
+## What is DUO, and what does this sync?
+
+The [Digital User Office (DUO)](https://duo.psi.ch/) is PSI's central web portal
+where external users submit beamtime proposals, experimental reports and manage
+their visits. It was originally developed at the Swiss Light Source to handle the
+large user community of a synchrotron facility, and now serves all PSI facilities.
+
+Proposal metadata (who is coming, for which experiment, on which instrument) must
+also exist in SciCat so that collected data can be attached to the right proposal
+and access can be granted to the right people. This chart runs a small job that
+calls the DUO API (`https://duo.psi.ch/duo/api.php/v1/`) and imports/updates
+proposals into SciCat — the running code lives in the application image, this
+chart only schedules it.
+
+Because each PSI facility opens proposals on its own cadence, the chart fans a
+list of facilities out into **one CronJob each**, so every facility can have its
+own schedule (and, for neutron proposals, its own reference year).
+
+## Facilities
+
+The default `duo_facilities` list covers the PSI large-scale facilities:
+
+| `name`     | Facility                                         |
+| ---------- | ------------------------------------------------ |
+| `pgroups`  | Proposal groups (cross-facility)                 |
+| `sls`      | Swiss Light Source (synchrotron)                 |
+| `swissfel` | SwissFEL (X-ray free-electron laser)             |
+| `smus`     | SμS — muon source (SmuS)                         |
+| `sinq`     | SINQ — spallation neutron source (uses a `year`) |
+
+Each entry becomes a CronJob named `<release>-<name>[-<year>]`, invoked with
+`DUO_FACILITY` and `DUO_YEAR` environment variables so the same image knows which
+facility/year to sync.
+
+## Compatibility
+
+- **Chart API:** `apiVersion: v2` (`kubeVersion: ">=1.9"`). Works on Helm **3.x** and **4.x**.
+
+## Installing / uninstalling
+
+```bash
+helm install my-release path/to/duo_facility_proposals -f my-values.yaml
+helm delete my-release
+```
+
+> **Note:** Today the CI repos install this chart from a local path. Publishing it
+> to a registry is separate future work.
+
+## Parameters
+
+| Parameter                           | Description                                                                                            | Default        |
+| ----------------------------------- | ------------------------------------------------------------------------------------------------------ | -------------- |
+| `nameOverride` / `fullnameOverride` | Override the generated name                                                                            | `""`           |
+| `image.repository`                  | Image name (templated)                                                                                 | `busybox`      |
+| `image.tag`                         | Image tag (templated)                                                                                  | `latest`       |
+| `image.pullPolicy`                  | Image pull policy                                                                                      | `IfNotPresent` |
+| `cronjob.schedule`                  | Default schedule for facilities that don't set their own                                               | `0 7 * * 1`    |
+| `cronjob.restartPolicy`             | Pod restart policy                                                                                     | `OnFailure`    |
+| `cronjob.ttlSecondsAfterFinished`   | Cleanup delay for finished jobs (optional)                                                             | `nil`          |
+| `duo_facilities[]`                  | List of facilities to sync. Each has `name`, optional `schedule`, optional `year`                      | see values     |
+| `facilities_schedule`               | Optional override providing the `duo_facilities` list from an external values file                     | `nil`          |
+| `env`                               | Additional environment variables (templated, k8s `env` syntax). Merged after `DUO_FACILITY`/`DUO_YEAR` | `nil`          |
+| `volumes` / `volumeMounts`          | Pod volumes and mounts (templated, k8s syntax)                                                         | `nil`          |
+| `secrets`                           | Map of `secretName -> {type, data: {...}}`. Values must be **base64-encoded**                          | `{}`           |
+
+> `env` is effectively required: the container always sets `DUO_FACILITY`/`DUO_YEAR`
+> and then splices `env` after them, so a config is expected to supply it.
+
+## Key behaviors
+
+This chart shares the value-injection and secret conventions of
+`generic-service-chart` — see its README for the full explanation:
+
+- **Templated values:** `env`, `volumes`, `secrets` and `image.*` are passed
+  through Helm's `tpl`, so they may contain Go template expressions evaluated
+  against the release (`{{ .Release.Name }}`, injected `{{ .Values.* }}`).
+- **base64 secrets:** values under `secrets.<name>.data` must be base64-encoded.
+  The chart validates this and fails the render otherwise.
+
+## Example
+
+```yaml
+image:
+  repository: "{{ .Values.ciRepository }}"
+  tag: "{{ .Values.ciTag }}"
+env:
+  - name: SCICAT_ENDPOINT
+    value: "{{ .Values.scicatEndpoint }}"
+  - name: DUO_ENDPOINT
+    value: https://duo.psi.ch/duo/api.php/v1/
+volumes:
+  - name: secrets-volume
+    secret:
+      secretName: "{{ .Release.Name }}-s"
+volumeMounts:
+  - name: secrets-volume
+    mountPath: /usr/src/proposals/.env
+    subPath: .env
+secrets:
+  "{{ .Release.Name }}-s":
+    type: Opaque
+    data:
+      .env: "{{ .Values.secretsJson.PROPOSAL_ENV }}"   # already base64-encoded
+```
+
+## Maintaining the chart
+
+- Bump `version` in `Chart.yaml` (SemVer) on every change to the chart or its
+  templates.
+- Targets the Helm v2 chart API. No changes needed for Helm 4. Validate with a
+  `helm template` diff (with a real config, since `env` is required) before/after
+  any change.
