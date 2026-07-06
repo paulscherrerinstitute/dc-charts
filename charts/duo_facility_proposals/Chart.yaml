@@ -1,5 +1,5 @@
 apiVersion: v2
-name: proposals-cronjob-chart
+name: proposals-cronjob
 description: A Helm chart for Kubernetes cronjobs from list of duo facilities
 kubeVersion: ">=1.9"
 # A chart can be either an 'application' or a 'library' chart.
