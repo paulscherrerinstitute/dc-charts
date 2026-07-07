@@ -1,9 +1,9 @@
-# cron-chart
+# cron
 
 A small chart that deploys a single scheduled **CronJob**, with optional config
 maps, secrets and volumes. Use it for periodic tasks that run on their own
 schedule rather than as a long-running service (for a one-shot job attached to a
-service deployment, use the job support in `generic-service-chart` instead).
+service deployment, use the job support in `generic-service` instead).
 
 ## Compatibility
 
@@ -12,14 +12,14 @@ service deployment, use the job support in `generic-service-chart` instead).
 
 ## How it is used at PSI
 
-Like `generic-service-chart`, each task ships a small values file and the CI
+Like `generic-service`, each task ships a small values file and the CI
 deploy step layers it on top of this chart, injecting deploy-time parameters and
 secrets. Current consumers:
 
-- **`scicat-to-pss`** (scicat-ci) — periodically pushes SciCat metadata into PSS.
-- **`materialised-view`** (scicat-ci) — refreshes MongoDB materialised views from
+- **`scicat-to-pss`** (scicat-ci) periodically pushes SciCat metadata into PSS.
+- **`materialised-view`** (scicat-ci) refreshes MongoDB materialised views from
   a mounted `mongosh` script (uses `configMaps` + `run` + `secrets`).
-- **`proposal-sync`** (scilog-ci) — syncs proposals into SciLog, using an
+- **`proposal-sync`** (scilog-ci) syncs proposals into SciLog, using an
   `initContainer` to pre-fetch assets before the run.
 
 ## Installing / uninstalling
@@ -33,6 +33,10 @@ helm delete my-release
 > to a registry is separate future work.
 
 ## Parameters
+
+> `(templated)` values are run through Helm's `tpl` function. They can hold
+> template expressions such as `{{ .Values.ciTag }}` or `{{ .Release.Name }}`.
+> Helm fills these in at render time using the deploy values and the release name.
 
 | Parameter                  | Description                                                                   | Default     |
 | -------------------------- | ----------------------------------------------------------------------------- | ----------- |
@@ -49,16 +53,16 @@ helm delete my-release
 | `volumes`                  | Pod volumes (templated, k8s syntax)                                           | `nil`       |
 | `volumeMounts`             | Container volume mounts (templated, k8s syntax)                               | `nil`       |
 | `configMaps`               | Map of `configMapName -> {key: value, ...}` (templated)                       | `{}`        |
-| `secrets`                  | Map of `secretName -> {type, data: {...}}`. Values must be **base64-encoded** | `{}`        |
+| `secrets`                  | Map of `secretName -> {type, data: {...}}` (templated). Values must be **base64-encoded** | `{}`        |
 
 ## Key behaviors
 
 This chart shares the value-injection and secret conventions of
-`generic-service-chart` — see its README for the full explanation:
+`generic-service`. See its README for the full explanation:
 
 - **Templated values:** `env`, `run`, `volumes`, `configMaps`, `secrets` and
   `image.*` are passed through Helm's `tpl`, so they may contain Go template
-  expressions evaluated against the release (`{{ .Release.Name }}`, injected
+  expressions that Helm fills in at render time (`{{ .Release.Name }}`, injected
   `{{ .Values.* }}`).
 - **base64 secrets:** values under `secrets.<name>.data` must be base64-encoded.
   The chart validates this and fails the render otherwise.
@@ -66,7 +70,7 @@ This chart shares the value-injection and secret conventions of
   the job-pod template, so changing config rolls the next scheduled run onto the
   new values.
 
-## Example
+## Examples
 
 ```yaml
 image:

@@ -1,4 +1,4 @@
-# generic-service-chart
+# generic-service
 
 A single, highly configurable chart used to deploy most of the simple services
 that make up SciCat and SciLog. Instead of maintaining one chart per service,
@@ -31,8 +31,8 @@ helm upgrade --install <release> path/to/generic_service \
 ```
 
 The values file can reference those injected parameters with Go template syntax
-(`{{ .Values.db }}`, `{{ .Values.secretsJson.FOO }}`, `{{ .Release.Name }}`) —
-see [Templated values](#templated-values) below. This is what makes one chart
+(`{{ .Values.db }}`, `{{ .Values.secretsJson.FOO }}`, `{{ .Release.Name }}`).
+See [Templated values](#templated-values) below. This is what makes one chart
 serve many services.
 
 ## Installing / uninstalling
@@ -51,9 +51,13 @@ helm delete my-release
 
 > **Note:** Today the CI repos install this chart from a local path. Publishing it
 > as a versioned package to a registry is separate future work. Once published, the
-> install command becomes `helm install my-release <repo>/generic-service-chart`.
+> install command becomes `helm install my-release <repo>/generic-service`.
 
 ## Parameters
+
+> `(templated)` values are run through Helm's `tpl` function. They can hold
+> template expressions such as `{{ .Values.ciTag }}` or `{{ .Release.Name }}`.
+> Helm fills these in at render time. See [Templated values](#templated-values) below.
 
 ### Common
 
@@ -81,8 +85,8 @@ helm delete my-release
 | `affinity`        | Pod affinity/anti-affinity rules                        | `nil`   |
 | `securityContext` | Pod security context                                    | `nil`   |
 | `initContainers`  | Init containers (templated, k8s syntax)                 | `nil`   |
-| `run.command`     | Container command (`command:`)                          | `nil`   |
-| `run.args`        | Container arguments (`args:`)                           | `nil`   |
+| `run.command`     | Container command (`command:`, templated)               | `nil`   |
+| `run.args`        | Container arguments (`args:`, templated)                | `nil`   |
 | `env`             | Environment variables (templated, k8s `env` syntax)     | `nil`   |
 | `envFrom`         | Environment sources (templated, k8s `envFrom` syntax)   | `nil`   |
 | `volumes`         | Pod volumes (templated, k8s syntax)                     | `nil`   |
@@ -93,10 +97,10 @@ helm delete my-release
 | Parameter    | Description                                                                                                                         | Default |
 | ------------ | ----------------------------------------------------------------------------------------------------------------------------------- | ------- |
 | `configMaps` | Map of `configMapName -> {key: value, ...}`. Values are templated. e.g. `{cm1: {k1: v1, k2: v2}}`                                   | `{}`    |
-| `secrets`    | Map of `secretName -> {type, data: {key: value, ...}}`. Values must be **base64-encoded** (see [below](#base64-secret-enforcement)) | `{}`    |
+| `secrets`    | Map of `secretName -> {type, data: {key: value, ...}}` (templated). Values must be **base64-encoded** (see [below](#base64-secret-enforcement)) | `{}`    |
 
 Changing `configMaps` or `secrets` triggers a rolling restart of the Deployment
-automatically — a checksum of both is stored as a pod annotation, so an
+automatically. A checksum of both is stored as a pod annotation, so an
 `upgrade` that only changes config still rolls the pods.
 
 ### Probes
@@ -137,7 +141,7 @@ the same service (e.g. different annotations per path), provide a list under
 | `ingress.enabled`                            | Create the ingress                                                                                             | `false`    |
 | `ingress.name`                               | Ingress name                                                                                                   | `fullname` |
 | `ingress.className`                          | Ingress class                                                                                                  | `nil`      |
-| `ingress.annotations`                        | Ingress annotations. Keys prefixed with `b64/` are base64-decoded at render (see [below](#base64-annotations)) | `{}`       |
+| `ingress.annotations`                        | Ingress annotations (templated). Keys prefixed with `b64/` are base64-decoded at render (see [below](#base64-annotations)) | `{}`       |
 | `ingress.hosts[].host`                       | Host (templated)                                                                                               | `nil`      |
 | `ingress.hosts[].paths[].path` / `.pathType` | Path and path type                                                                                             | `/`        |
 | `ingress.tls[].hosts[]`                      | Hosts covered by a TLS cert (templated)                                                                        | `nil`      |
@@ -164,7 +168,7 @@ the same service (e.g. different annotations per path), provide a list under
 Most value fields (`env`, `volumes`, `image.*`, `configMaps`, `secrets`,
 `ingress.hosts`, `initContainers`, `probeChecks`, `test`, …) are passed through
 Helm's `tpl` function, so their contents may themselves contain Go template
-expressions evaluated against the release. This is the mechanism that lets a
+expressions that Helm fills in at render time. This is the mechanism that lets a
 service file reference deploy-time parameters, e.g.:
 
 ```yaml
@@ -279,4 +283,4 @@ Either `kubectl scale`, or upgrade with a new `replicaCount`.
   templates. Consumers pin to a version once the chart is published.
 - The chart targets Helm v2 chart API and needs no changes for Helm 4. When the
   CI runners move to Helm 4, this chart is expected to render and deploy
-  identically — validate with `helm lint` and a `helm template` diff before/after.
+  identically. Validate with `helm lint` and a `helm template` diff before/after.

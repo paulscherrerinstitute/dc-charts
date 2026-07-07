@@ -1,4 +1,4 @@
-# proposals-cronjob-chart
+# proposals-cronjob
 
 Deploys the **DUO proposal sync** as one Kubernetes CronJob per PSI facility.
 
@@ -13,7 +13,7 @@ Proposal metadata (who is coming, for which experiment, on which instrument) mus
 also exist in SciCat so that collected data can be attached to the right proposal
 and access can be granted to the right people. This chart runs a small job that
 calls the DUO API (`https://duo.psi.ch/duo/api.php/v1/`) and imports/updates
-proposals into SciCat — the running code lives in the application image, this
+proposals into SciCat. The running code lives in the application image, this
 chart only schedules it.
 
 Because each PSI facility opens proposals on its own cadence, the chart fans a
@@ -29,8 +29,8 @@ The default `duo_facilities` list covers the PSI large-scale facilities:
 | `pgroups`  | Proposal groups (cross-facility)                 |
 | `sls`      | Swiss Light Source (synchrotron)                 |
 | `swissfel` | SwissFEL (X-ray free-electron laser)             |
-| `smus`     | SμS — muon source (SmuS)                         |
-| `sinq`     | SINQ — spallation neutron source (uses a `year`) |
+| `smus`     | SμS, muon source (SmuS)                         |
+| `sinq`     | SINQ, spallation neutron source (uses a `year`) |
 
 Each entry becomes a CronJob named `<release>-<name>[-<year>]`, invoked with
 `DUO_FACILITY` and `DUO_YEAR` environment variables so the same image knows which
@@ -39,6 +39,13 @@ facility/year to sync.
 ## Compatibility
 
 - **Chart API:** `apiVersion: v2` (`kubeVersion: ">=1.9"`). Works on Helm **3.x** and **4.x**.
+
+## How it is used at PSI
+
+Like the other charts, the CI deploy step layers a small values file on top of
+this chart. It injects deploy-time parameters and secrets at install. The
+current consumer is `proposals` (scicat-ci), which schedules the per-facility
+DUO to SciCat proposal sync.
 
 ## Installing / uninstalling
 
@@ -51,6 +58,10 @@ helm delete my-release
 > to a registry is separate future work.
 
 ## Parameters
+
+> `(templated)` values are run through Helm's `tpl` function. They can hold
+> template expressions such as `{{ .Values.ciTag }}` or `{{ .Release.Name }}`.
+> Helm fills these in at render time using the deploy values and the release name.
 
 | Parameter                           | Description                                                                                            | Default        |
 | ----------------------------------- | ------------------------------------------------------------------------------------------------------ | -------------- |
@@ -65,23 +76,23 @@ helm delete my-release
 | `facilities_schedule`               | Optional override providing the `duo_facilities` list from an external values file                     | `nil`          |
 | `env`                               | Additional environment variables (templated, k8s `env` syntax). Merged after `DUO_FACILITY`/`DUO_YEAR` | `nil`          |
 | `volumes` / `volumeMounts`          | Pod volumes and mounts (templated, k8s syntax)                                                         | `nil`          |
-| `secrets`                           | Map of `secretName -> {type, data: {...}}`. Values must be **base64-encoded**                          | `{}`           |
+| `secrets`                           | Map of `secretName -> {type, data: {...}}` (templated). Values must be **base64-encoded**              | `{}`           |
 
-> `env` is effectively required: the container always sets `DUO_FACILITY`/`DUO_YEAR`
+> `env` is effectively required. The container always sets `DUO_FACILITY`/`DUO_YEAR`
 > and then splices `env` after them, so a config is expected to supply it.
 
 ## Key behaviors
 
 This chart shares the value-injection and secret conventions of
-`generic-service-chart` — see its README for the full explanation:
+`generic-service`. See its README for the full explanation:
 
 - **Templated values:** `env`, `volumes`, `secrets` and `image.*` are passed
-  through Helm's `tpl`, so they may contain Go template expressions evaluated
-  against the release (`{{ .Release.Name }}`, injected `{{ .Values.* }}`).
+  through Helm's `tpl`, so they may contain Go template expressions that Helm
+  fills in at render time (`{{ .Release.Name }}`, injected `{{ .Values.* }}`).
 - **base64 secrets:** values under `secrets.<name>.data` must be base64-encoded.
   The chart validates this and fails the render otherwise.
 
-## Example
+## Examples
 
 ```yaml
 image:

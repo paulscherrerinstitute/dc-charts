@@ -18,9 +18,5 @@ type: application
 version: 0.1.0
 
 maintainers:
-  - name: Stephan Egli
-    email: "stephan.egli@psi.ch"
-  - name: Carlo Minotti
-    email: "carlo.minotti@psi.ch"
-  - name: Krisztian Pozsa
-    email: "krisztian.pozsa@psi.ch"
+  - name: Data Curation
+    email: "awi-7903@psi.ch"
