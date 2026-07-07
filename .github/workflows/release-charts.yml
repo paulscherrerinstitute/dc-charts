@@ -21,11 +21,13 @@ jobs:
   publish:
     runs-on: ubuntu-latest
     env:
-      REGISTRY: oci://ghcr.io/${{ github.repository }}
       HELM_VERSION: 'v3.21.2'
     steps:
       - name: Checkout to main
         uses: actions/checkout@v7
+
+      - name: Set lowercase OCI registry
+        run: echo "REGISTRY=oci://ghcr.io/${GITHUB_REPOSITORY,,}" >> "$GITHUB_ENV"
 
       - name: Install Helm
         uses: azure/setup-helm@v5
@@ -54,6 +56,6 @@ jobs:
             helm push "/tmp/pkg/${tag}.tgz" "$REGISTRY"
             gh release create "$tag" \
               --title "$tag" \
-              --notes "Chart ${name} ${ver} published to ${REGISTRY}/${name}" \
+              --notes "Chart ${name} ${ver} published to \`${REGISTRY}/${name}:${ver}\`" \
               --generate-notes
           done
