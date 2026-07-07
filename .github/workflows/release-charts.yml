@@ -1,0 +1,59 @@
+name: Release charts
+
+# Publishes each chart in charts/ as an OCI package to ghcr under the repo's
+# own namespace, and cuts a matching GitHub release (the semantic version tag).
+# A chart is handled only when its <name>-<version> release does not exist yet,
+# so republishing requires bumping the chart version in Chart.yaml.
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'charts/**'
+  workflow_dispatch:
+
+permissions:
+  contents: write 
+  packages: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    env:
+      REGISTRY: oci://ghcr.io/${{ github.repository }}
+      HELM_VERSION: 'v3.21.2'
+    steps:
+      - name: Checkout to main
+        uses: actions/checkout@v7
+
+      - name: Install Helm
+        uses: azure/setup-helm@v5
+        with:
+            version: ${{ env.HELM_VERSION }}
+
+      - name: Log in to ghcr
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | helm registry login ghcr.io -u "${{ github.actor }}" --password-stdin
+
+      - name: Package and push new chart versions
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/pkg
+          for dir in charts/*/; do
+            name=$(helm show chart "$dir" | awk '/^name:/{print $2; exit}')
+            ver=$(helm show chart "$dir" | awk '/^version:/{print $2; exit}')
+            tag=${name}-${ver}
+            if gh release view "$tag" &>/dev/null; then
+              echo "skip ${tag} (already released)"
+              continue
+            fi
+            helm lint "$dir"
+            helm package "$dir" -d /tmp/pkg
+            helm push "/tmp/pkg/${tag}.tgz" "$REGISTRY"
+            gh release create "$tag" \
+              --title "$tag" \
+              --notes "Chart ${name} ${ver} published to ${REGISTRY}/${name}" \
+              --generate-notes
+          done
