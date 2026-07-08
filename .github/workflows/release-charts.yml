@@ -21,7 +21,7 @@ jobs:
   publish:
     runs-on: ubuntu-latest
     env:
-      HELM_VERSION: 'v3.21.2'
+      HELM_VERSION: 'v4.2.2'
     steps:
       - name: Checkout to main
         uses: actions/checkout@v7
