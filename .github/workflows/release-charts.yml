@@ -2,8 +2,9 @@ name: Release charts
 
 # Publishes each chart in charts/ as an OCI package to ghcr under the repo's
 # own namespace, and cuts a matching GitHub release (the semantic version tag).
-# A chart is handled only when its <name>-<version> release does not exist yet,
-# so republishing requires bumping the chart version in Chart.yaml.
+# The discover job lists the charts whose <name>-<version> release does not exist
+# yet, with their metadata, then a matrix publishes each in its own parallel job.
+# Republishing a chart requires bumping its version in Chart.yaml.
 
 on:
   push:
@@ -11,19 +12,59 @@ on:
       - main
     paths:
       - 'charts/**'
-  workflow_dispatch:
 
 permissions:
-  contents: write 
+  contents: write
   packages: write
 
+env:
+  HELM_VERSION: 'v4.2.2'
+
 jobs:
-  publish:
+  discover:
     runs-on: ubuntu-latest
+    outputs:
+      charts: ${{ steps.list.outputs.charts }}
     env:
-      HELM_VERSION: 'v4.2.2'
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
-      - name: Checkout to main
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: List charts needing a release
+        id: list
+        run: |
+          set -euo pipefail
+          charts='[]'
+          for dir in charts/*/; do
+            name=$(yq '.name' "$dir/Chart.yaml")
+            ver=$(yq '.version' "$dir/Chart.yaml")
+            tag="${name}-${ver}"
+            if gh release view "$tag" &>/dev/null; then
+              echo "skip ${tag} (already released)"
+              continue
+            fi
+            echo "queue ${tag}"
+            charts=$(echo "$charts" | jq -c \
+              --arg dir "$dir" --arg name "$name" --arg ver "$ver" --arg tag "$tag" \
+              '. + [{dir: $dir, name: $name, ver: $ver, tag: $tag}]')
+          done
+          echo "charts=${charts}" >> "$GITHUB_OUTPUT"
+          echo "to release: ${charts}"
+
+  publish:
+    needs: discover
+    if: needs.discover.outputs.charts != '[]'
+    name: publish ${{ matrix.chart.name }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        chart: ${{ fromJSON(needs.discover.outputs.charts) }}
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - name: Checkout
         uses: actions/checkout@v7
 
       - name: Set lowercase OCI registry
@@ -34,28 +75,26 @@ jobs:
         with:
             version: ${{ env.HELM_VERSION }}
 
-      - name: Log in to ghcr
+      - name: Let helm authenticate to ghcr
         run: echo "${{ secrets.GITHUB_TOKEN }}" | helm registry login ghcr.io -u "${{ github.actor }}" --password-stdin
 
-      - name: Package and push new chart versions
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Package and push
         run: |
           set -euo pipefail
           mkdir -p /tmp/pkg
-          for dir in charts/*/; do
-            name=$(helm show chart "$dir" | awk '/^name:/{print $2; exit}')
-            ver=$(helm show chart "$dir" | awk '/^version:/{print $2; exit}')
-            tag=${name}-${ver}
-            if gh release view "$tag" &>/dev/null; then
-              echo "skip ${tag} (already released)"
-              continue
-            fi
-            helm lint "$dir"
-            helm package "$dir" -d /tmp/pkg
-            helm push "/tmp/pkg/${tag}.tgz" "$REGISTRY"
-            gh release create "$tag" \
-              --title "$tag" \
-              --notes "Chart ${name} ${ver} published to \`${REGISTRY}/${name}:${ver}\`" \
-              --generate-notes
+          helm package "${{ matrix.chart.dir }}" -d /tmp/pkg
+          # ghcr can flake on concurrent pushes to one namespace, retry the transient
+          attempts=3
+          for i in $(seq 1 "$attempts"); do
+            helm push "/tmp/pkg/${{ matrix.chart.tag }}.tgz" "$REGISTRY" && ok=1 && break
+            echo "push attempt ${i}/${attempts} failed, retrying in 5s"
+            sleep 5
           done
+          [ "${ok:-0}" = 1 ] || { echo "::error::push failed after ${attempts} attempts"; exit 1; }
+
+      - name: Create release
+        run: |
+          gh release create "${{ matrix.chart.tag }}" \
+            --title "${{ matrix.chart.tag }}" \
+            --notes "Chart ${{ matrix.chart.name }} ${{ matrix.chart.ver }} published to \`${REGISTRY}/${{ matrix.chart.name }}:${{ matrix.chart.ver }}\`" \
+            --generate-notes

@@ -1,0 +1,62 @@
+name: Validate charts
+
+# Runs on every pull request. The changed job filters to the charts the PR
+# touches, then for each of those it lints and renders with default values.
+# Real consumer configs live in the consumer repos, so this renders default
+# values only. Runs on all PRs (no path filter) so a ruleset can require this
+# workflow and the signal always reports, even when no chart changed.
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+env:
+  HELM_VERSION: 'v4.2.2'
+
+jobs:
+  changed:
+    runs-on: ubuntu-latest
+    outputs:
+      charts: ${{ steps.list.outputs.charts }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: List changed charts
+        id: list
+        run: |
+          set -euo pipefail
+          charts='[]'
+          for name in $(git diff --name-only "${{ github.event.pull_request.base.sha }}" HEAD -- charts/ | cut -d/ -f2 | sort -u); do
+            [ -f "charts/$name/Chart.yaml" ] || continue
+            charts=$(echo "$charts" | jq -c --arg c "$name" '. + [$c]')
+          done
+          echo "charts=${charts}" >> "$GITHUB_OUTPUT"
+          echo "changed charts: ${charts}"
+
+  validate:
+    needs: changed
+    if: needs.changed.outputs.charts != '[]'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        chart: ${{ fromJSON(needs.changed.outputs.charts) }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Install Helm
+        uses: azure/setup-helm@v5
+        with:
+            version: ${{ env.HELM_VERSION }}
+
+      - name: Lint
+        run: helm lint "charts/${{ matrix.chart }}"
+
+      - name: Render with default values
+        run: helm template t "charts/${{ matrix.chart }}" >/dev/null
