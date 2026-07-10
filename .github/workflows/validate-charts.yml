@@ -1,13 +1,16 @@
 name: Validate charts
 
-# Runs on every pull request. The changed job filters to the charts the PR
-# touches, then for each of those it lints and renders with default values.
-# Real consumer configs live in the consumer repos, so this renders default
-# values only. Runs on all PRs (no path filter) so a ruleset can require this
-# workflow and the signal always reports, even when no chart changed.
+# Runs on pull requests that touch charts/. The changed job uses
+# tj-actions/changed-files to list the charts the PR modifies, then a matrix lints
+# and renders each with default values. Real consumer configs live in the consumer
+# repos, so this renders default values only. A PR that touches no chart does not
+# trigger this workflow. If this is ever made a required check, that means such PRs
+# never report it, see the deferred required-check note.
 
 on:
   pull_request:
+    paths:
+      - 'charts/**'
 
 permissions:
   contents: read
@@ -19,24 +22,21 @@ jobs:
   changed:
     runs-on: ubuntu-latest
     outputs:
-      charts: ${{ steps.list.outputs.charts }}
+      charts: ${{ steps.list.outputs.all_changed_files }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           fetch-depth: 0
 
       - name: List changed charts
         id: list
-        run: |
-          set -euo pipefail
-          charts='[]'
-          for name in $(git diff --name-only "${{ github.event.pull_request.base.sha }}" HEAD -- charts/ | cut -d/ -f2 | sort -u); do
-            [ -f "charts/$name/Chart.yaml" ] || continue
-            charts=$(echo "$charts" | jq -c --arg c "$name" '. + [$c]')
-          done
-          echo "charts=${charts}" >> "$GITHUB_OUTPUT"
-          echo "changed charts: ${charts}"
+        uses: tj-actions/changed-files@9426d40962ed5378910ee2e21d5f8c6fcbf2dd96 # v47.0.6
+        with:
+          path: charts
+          dir_names: true
+          dir_names_max_depth: 1
+          matrix: true
 
   validate:
     needs: changed
@@ -48,10 +48,10 @@ jobs:
         chart: ${{ fromJSON(needs.changed.outputs.charts) }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
 
       - name: Install Helm
-        uses: azure/setup-helm@v5
+        uses: azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310 # v5.0.1
         with:
             version: ${{ env.HELM_VERSION }}
 

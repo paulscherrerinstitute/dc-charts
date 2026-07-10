@@ -29,7 +29,7 @@ jobs:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
 
       - name: List charts needing a release
         id: list
@@ -65,32 +65,33 @@ jobs:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
 
       - name: Set lowercase OCI registry
         run: echo "REGISTRY=oci://ghcr.io/${GITHUB_REPOSITORY,,}" >> "$GITHUB_ENV"
 
       - name: Install Helm
-        uses: azure/setup-helm@v5
+        uses: azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310 # v5.0.1
         with:
             version: ${{ env.HELM_VERSION }}
 
       - name: Let helm authenticate to ghcr
         run: echo "${{ secrets.GITHUB_TOKEN }}" | helm registry login ghcr.io -u "${{ github.actor }}" --password-stdin
 
-      - name: Package and push
+      - name: Package chart
         run: |
           set -euo pipefail
           mkdir -p /tmp/pkg
           helm package "${{ matrix.chart.dir }}" -d /tmp/pkg
-          # ghcr can flake on concurrent pushes to one namespace, retry the transient
-          attempts=3
-          for i in $(seq 1 "$attempts"); do
-            helm push "/tmp/pkg/${{ matrix.chart.tag }}.tgz" "$REGISTRY" && ok=1 && break
-            echo "push attempt ${i}/${attempts} failed, retrying in 5s"
-            sleep 5
-          done
-          [ "${ok:-0}" = 1 ] || { echo "::error::push failed after ${attempts} attempts"; exit 1; }
+
+      - name: Push chart
+        # ghcr can flake on concurrent pushes to one namespace, retry the transient
+        uses: nick-fields/retry@ad984534de44a9489a53aefd81eb77f87c70dc60 # v4.0.0
+        with:
+          timeout_minutes: 5
+          max_attempts: 3
+          retry_wait_seconds: 5
+          command: helm push "/tmp/pkg/${{ matrix.chart.tag }}.tgz" "$REGISTRY"
 
       - name: Create release
         run: |
