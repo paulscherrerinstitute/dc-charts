@@ -11,6 +11,7 @@ on:
   pull_request:
     paths:
       - 'charts/**'
+      - '.github/workflows/validate-charts.yml'
 
 permissions:
   contents: read
