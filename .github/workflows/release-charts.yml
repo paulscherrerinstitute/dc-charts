@@ -1,0 +1,101 @@
+name: Release charts
+
+# Publishes each chart in charts/ as an OCI package to ghcr under the repo's
+# own namespace, and cuts a matching GitHub release (the semantic version tag).
+# The discover job lists the charts whose <name>-<version> release does not exist
+# yet, with their metadata, then a matrix publishes each in its own parallel job.
+# Republishing a chart requires bumping its version in Chart.yaml.
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'charts/**'
+
+permissions:
+  contents: write
+  packages: write
+
+env:
+  HELM_VERSION: 'v4.2.2'
+
+jobs:
+  discover:
+    runs-on: ubuntu-latest
+    outputs:
+      charts: ${{ steps.list.outputs.charts }}
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - name: List charts needing a release
+        id: list
+        run: |
+          set -euo pipefail
+          charts='[]'
+          for dir in charts/*/; do
+            name=$(yq '.name' "$dir/Chart.yaml")
+            ver=$(yq '.version' "$dir/Chart.yaml")
+            tag="${name}-${ver}"
+            if gh release view "$tag" &>/dev/null; then
+              echo "skip ${tag} (already released)"
+              continue
+            fi
+            echo "queue ${tag}"
+            charts=$(echo "$charts" | jq -c \
+              --arg dir "$dir" --arg name "$name" --arg ver "$ver" --arg tag "$tag" \
+              '. + [{dir: $dir, name: $name, ver: $ver, tag: $tag}]')
+          done
+          echo "charts=${charts}" >> "$GITHUB_OUTPUT"
+          echo "to release: ${charts}"
+
+  publish:
+    needs: discover
+    if: needs.discover.outputs.charts != '[]'
+    name: publish ${{ matrix.chart.name }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        chart: ${{ fromJSON(needs.discover.outputs.charts) }}
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - name: Set lowercase OCI registry
+        run: echo "REGISTRY=oci://ghcr.io/${GITHUB_REPOSITORY,,}" >> "$GITHUB_ENV"
+
+      - name: Install Helm
+        uses: azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310 # v5.0.1
+        with:
+            version: ${{ env.HELM_VERSION }}
+
+      - name: Let helm authenticate to ghcr
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | helm registry login ghcr.io -u "${{ github.actor }}" --password-stdin
+
+      - name: Package chart
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/pkg
+          helm package "${{ matrix.chart.dir }}" -d /tmp/pkg
+
+      - name: Push chart
+        # ghcr can flake on concurrent pushes to one namespace, retry the transient
+        uses: nick-fields/retry@ad984534de44a9489a53aefd81eb77f87c70dc60 # v4.0.0
+        with:
+          timeout_minutes: 5
+          max_attempts: 3
+          retry_wait_seconds: 5
+          command: helm push "/tmp/pkg/${{ matrix.chart.tag }}.tgz" "$REGISTRY"
+
+      - name: Create release
+        run: |
+          gh release create "${{ matrix.chart.tag }}" \
+            --title "${{ matrix.chart.tag }}" \
+            --notes "Chart ${{ matrix.chart.name }} ${{ matrix.chart.ver }} published to \`${REGISTRY}/${{ matrix.chart.name }}:${{ matrix.chart.ver }}\`" \
+            --generate-notes

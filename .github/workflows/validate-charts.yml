@@ -1,0 +1,62 @@
+name: Validate charts
+
+# Runs on pull requests that touch charts/. The changed job uses
+# tj-actions/changed-files to list the charts the PR modifies, then a matrix lints
+# and renders each with default values. Real consumer configs live in the consumer
+# repos, so this renders default values only. A PR that touches no chart does not
+# trigger this workflow. If this is ever made a required check, that means such PRs
+# never report it, see the deferred required-check note.
+
+on:
+  pull_request:
+    paths:
+      - 'charts/**'
+
+permissions:
+  contents: read
+
+env:
+  HELM_VERSION: 'v4.2.2'
+
+jobs:
+  changed:
+    runs-on: ubuntu-latest
+    outputs:
+      charts: ${{ steps.list.outputs.all_changed_files }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          fetch-depth: 0
+
+      - name: List changed charts
+        id: list
+        uses: tj-actions/changed-files@9426d40962ed5378910ee2e21d5f8c6fcbf2dd96 # v47.0.6
+        with:
+          path: charts
+          dir_names: true
+          dir_names_max_depth: 1
+          matrix: true
+
+  validate:
+    needs: changed
+    if: needs.changed.outputs.charts != '[]'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        chart: ${{ fromJSON(needs.changed.outputs.charts) }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - name: Install Helm
+        uses: azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310 # v5.0.1
+        with:
+            version: ${{ env.HELM_VERSION }}
+
+      - name: Lint
+        run: helm lint "charts/${{ matrix.chart }}"
+
+      - name: Render with default values
+        run: helm template t "charts/${{ matrix.chart }}" >/dev/null
