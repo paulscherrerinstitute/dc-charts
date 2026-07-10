@@ -57,7 +57,7 @@ jobs:
             version: ${{ env.HELM_VERSION }}
 
       - name: Lint
-        run: helm lint "charts/${{ matrix.chart }}"
+        run: helm lint --strict "charts/${{ matrix.chart }}"
 
       - name: Render with default values
         run: helm template t "charts/${{ matrix.chart }}" >/dev/null

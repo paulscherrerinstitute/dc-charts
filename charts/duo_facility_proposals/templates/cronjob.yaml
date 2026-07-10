@@ -32,7 +32,9 @@ spec:
               value: {{ .name }}
             - name: DUO_YEAR
               value: {{ .year | quote }}
-            {{- tpl (toYaml $.Values.env) $ | nindent 12 }}
+            {{- with $.Values.env }}
+            {{- tpl (toYaml .) $ | nindent 12 }}
+            {{- end }}
             {{- with $.Values.volumeMounts }}
             volumeMounts:
               {{- tpl (toYaml .) $ | nindent 12 }}
