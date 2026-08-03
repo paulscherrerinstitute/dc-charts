@@ -3,18 +3,21 @@
 {{- $fullName := include "helm_chart.fullname" $ -}}
 {{- $svcPort := $.Values.service.externalPort -}}
 {{- $gitVersion := $.Capabilities.KubeVersion.GitVersion -}}
+{{- $annotations := default dict $ingress.annotations }}
 {{- if and $ingress.className (not (semverCompare ">=1.18-0" $gitVersion)) }}
-  {{- if not (hasKey $ingress.annotations "kubernetes.io/ingress.class") }}
-  {{- $_ := set $ingress.annotations "kubernetes.io/ingress.class" $ingress.className}}
+  {{- if not (hasKey $annotations "kubernetes.io/ingress.class") }}
+  {{- $_ := set $annotations "kubernetes.io/ingress.class" $ingress.className}}
   {{- end }}
 {{- end }}
-{{- range $annKey, $annValue := $ingress.annotations }}
-  {{- if hasPrefix "b64/" $annKey }}
-    {{- $newKey := trimPrefix "b64/" $annKey -}}
-    {{- $decodedValue := tpl $annValue $ }}
-    {{- $_ := set $ingress.annotations (trimPrefix "b64/" $annKey) ($decodedValue | include "validateSecret" | b64dec) }}
-    {{- $_ := unset $ingress.annotations $annKey }}
-  {{- end }}
+{{- /*
+Template each value on its own, never the serialised map. A Go template error
+quotes its whole input, so one broken annotation would print every other value,
+secrets included. Rendering per value also stops a resolved secret containing
+{{ }} from being executed.
+*/ -}}
+{{- $rendered := dict }}
+{{- range $annKey, $annValue := $annotations }}
+  {{- $_ := set $rendered $annKey (tpl (toString $annValue) $) }}
 {{- end }}
 {{- if semverCompare ">=1.19-0" $gitVersion -}}
 apiVersion: networking.k8s.io/v1
@@ -26,9 +29,9 @@ apiVersion: extensions/v1beta1
 kind: Ingress
 metadata:
   name: {{ default $fullName $ingress.name }}
-  {{- with $ingress.annotations }}
+  {{- with $rendered }}
   annotations:
-    {{- tpl (toYaml .) $ | nindent 4 }}
+    {{- toYaml . | nindent 4 }}
   {{- end }}
   labels:
     {{- include "helm_chart.labels" $ | nindent 4 }}
