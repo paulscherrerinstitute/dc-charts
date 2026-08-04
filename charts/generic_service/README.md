@@ -141,7 +141,7 @@ the same service (e.g. different annotations per path), provide a list under
 | `ingress.enabled`                            | Create the ingress                                                                                             | `false`    |
 | `ingress.name`                               | Ingress name                                                                                                   | `fullname` |
 | `ingress.className`                          | Ingress class                                                                                                  | `nil`      |
-| `ingress.annotations`                        | Ingress annotations (templated). Keys prefixed with `b64/` are base64-decoded at render (see [below](#base64-annotations)) | `{}`       |
+| `ingress.annotations`                        | Ingress annotations. Each value is templated on its own (see [below](#secret-annotations))                     | `{}`       |
 | `ingress.hosts[].host`                       | Host (templated)                                                                                               | `nil`      |
 | `ingress.hosts[].paths[].path` / `.pathType` | Path and path type                                                                                             | `/`        |
 | `ingress.tls[].hosts[]`                      | Hosts covered by a TLS cert (templated)                                                                        | `nil`      |
@@ -197,16 +197,23 @@ secrets:
       pss_mongodb_url: "{{ .Values.secretsJson.PSS_MONGODB_URL }}"  # already b64
 ```
 
-### base64 annotations
+### secret annotations
 
-Ingress annotations whose key starts with `b64/` have their value base64-decoded
-at render time and the prefix stripped. Use this for annotations that carry
-secret-derived data (e.g. an IP allow-list) so the plaintext is not committed:
+An annotation can carry secret-derived data, e.g. an IP allow-list. Reference the
+secret like any other value:
 
 ```yaml
 annotations:
-  b64/nginx.ingress.kubernetes.io/whitelist-source-range: "{{ .Values.secretsJson.WHITELISTED_IPS }}"
+  nginx.ingress.kubernetes.io/whitelist-source-range: "{{ .Values.secretsJson.WHITELISTED_IPS }}"
 ```
+
+**Store the value in plain text.** Unlike `secrets.<name>.data`, an Ingress
+annotation is a literal string, so base64 would reach the Ingress as base64.
+
+Each annotation value is templated on its own, never as part of the serialised
+map. So the reference above resolves, the result is never templated again, and a
+broken annotation elsewhere on the same Ingress cannot print this value in its
+error.
 
 ### Jobs
 
@@ -241,7 +248,7 @@ ingresses:
     name: backend-login
     annotations:
       kubernetes.io/ingress.class: nginx
-      b64/nginx.ingress.kubernetes.io/whitelist-source-range: "{{ .Values.secretsJson.WHITELISTED_IPS }}"
+      nginx.ingress.kubernetes.io/whitelist-source-range: "{{ .Values.secretsJson.WHITELISTED_IPS }}"
     hosts:
       - host: "{{ .Values.host }}"
         paths:
