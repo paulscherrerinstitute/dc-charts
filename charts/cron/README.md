@@ -25,12 +25,13 @@ secrets. Current consumers:
 ## Installing / uninstalling
 
 ```bash
-helm install my-release path/to/cron -f my-values.yaml
+helm install my-release \
+  oci://ghcr.io/paulscherrerinstitute/dc-charts/cron --version 1.0.0 \
+  -f my-values.yaml
 helm delete my-release
 ```
 
-> **Note:** Today the CI repos install this chart from a local path. Publishing it
-> to a registry is separate future work.
+Always pin `--version`.
 
 ## Parameters
 

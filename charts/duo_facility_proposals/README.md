@@ -50,12 +50,14 @@ DUO to SciCat proposal sync.
 ## Installing / uninstalling
 
 ```bash
-helm install my-release path/to/duo_facility_proposals -f my-values.yaml
+helm install my-release \
+  oci://ghcr.io/paulscherrerinstitute/dc-charts/proposals-cronjob --version 0.1.1 \
+  -f my-values.yaml
 helm delete my-release
 ```
 
-> **Note:** Today the CI repos install this chart from a local path. Publishing it
-> to a registry is separate future work.
+Always pin `--version`. Note the published name is `proposals-cronjob`, not the
+directory name.
 
 ## Parameters
 
@@ -72,8 +74,8 @@ helm delete my-release
 | `cronjob.schedule`                  | Default schedule for facilities that don't set their own                                               | `0 7 * * 1`    |
 | `cronjob.restartPolicy`             | Pod restart policy                                                                                     | `OnFailure`    |
 | `cronjob.ttlSecondsAfterFinished`   | Cleanup delay for finished jobs (optional)                                                             | `nil`          |
-| `duo_facilities[]`                  | List of facilities to sync. Each has `name`, optional `schedule`, optional `year`                      | see values     |
-| `facilities_schedule`               | Optional override providing the `duo_facilities` list from an external values file                     | `nil`          |
+| `duo_facilities[]`                  | List of facilities to sync. Each has `name`, optional `schedule`, `year`, `ttlSecondsAfterFinished`    | see values     |
+| `facilities_schedule`               | Optional override holding the `duo_facilities` list as a raw YAML **string**. See below                | `nil`          |
 | `env`                               | Additional environment variables (templated, k8s `env` syntax). Merged after `DUO_FACILITY`/`DUO_YEAR` | `nil`          |
 | `volumes` / `volumeMounts`          | Pod volumes and mounts (templated, k8s syntax)                                                         | `nil`          |
 | `secrets`                           | Map of `secretName -> {type, data: {...}}` (templated). Values must be **base64-encoded**              | `{}`           |
@@ -91,6 +93,32 @@ This chart shares the value-injection and secret conventions of
   fills in at render time (`{{ .Release.Name }}`, injected `{{ .Values.* }}`).
 - **base64 secrets:** values under `secrets.<name>.data` must be base64-encoded.
   The chart validates this and fails the render otherwise.
+
+### `facilities_schedule` takes a string, not a map
+
+`templates/_helpers.tpl` emits the value verbatim and the caller pipes it through
+`fromYaml`. So the value must be raw YAML text that holds a `duo_facilities:` key.
+
+**A map renders nothing and reports success.** Go prints a map as `map[...]`,
+`fromYaml` cannot read that, and the range over the missing list produces no
+CronJob. `helm template` exits 0 with empty output. Measured on 2026-08-20.
+
+```yaml
+facilities_schedule: |
+  duo_facilities:
+    - name: sls
+      schedule: "0 7 * * 1"
+```
+
+Leave `facilities_schedule` unset to use the `duo_facilities` list in the values
+file. That is what every consumer does today.
+
+### A per-facility TTL needs the chart-level default
+
+`templates/cronjob.yaml` reads `ttlSecondsAfterFinished` from the facility, but
+only inside a `with` guard on `cronjob.ttlSecondsAfterFinished`. So a facility TTL
+alone renders nothing. Set the chart-level value first, then override it per
+facility.
 
 ## Examples
 

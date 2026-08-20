@@ -24,11 +24,16 @@ at this chart and layers the service values on top, injecting a few
 deploy-time parameters and secrets:
 
 ```bash
-helm upgrade --install <release> path/to/generic_service \
+helm upgrade --install <release> \
+  oci://ghcr.io/paulscherrerinstitute/dc-charts/generic-service --version 2.0.0 \
   -f helm/configs/<service>/values.yaml \
   --set db=<release>-<env> \
   --set-json secretsJson='{ ... }'
 ```
+
+scicat-ci runs that upgrade through helmfile. Each component declares the chart,
+the version and the values in `helm/configs/<service>/helmfile.yaml.gotmpl`.
+scilog-ci still calls helm from its own workflow.
 
 The values file can reference those injected parameters with Go template syntax
 (`{{ .Values.db }}`, `{{ .Values.secretsJson.FOO }}`, `{{ .Release.Name }}`).
@@ -40,7 +45,9 @@ serve many services.
 Install with a service values file and a release name:
 
 ```bash
-helm install my-release path/to/generic_service -f my-values.yaml
+helm install my-release \
+  oci://ghcr.io/paulscherrerinstitute/dc-charts/generic-service --version 2.0.0 \
+  -f my-values.yaml
 ```
 
 Uninstall:
@@ -49,9 +56,8 @@ Uninstall:
 helm delete my-release
 ```
 
-> **Note:** Today the CI repos install this chart from a local path. Publishing it
-> as a versioned package to a registry is separate future work. Once published, the
-> install command becomes `helm install my-release <repo>/generic-service`.
+Always pin `--version`. Version 2.0.0 is a breaking change against 1.0.0, which
+templates each ingress annotation on its own. See [secret annotations](#secret-annotations).
 
 ## Parameters
 
@@ -204,7 +210,7 @@ secret like any other value:
 
 ```yaml
 annotations:
-  nginx.ingress.kubernetes.io/whitelist-source-range: "{{ .Values.secretsJson.WHITELISTED_IPS }}"
+  nginx.ingress.kubernetes.io/whitelist-source-range: "{{ .Values.secretsJson.WHITELISTED_CIDRS }}"
 ```
 
 **Store the value in plain text.** Unlike `secrets.<name>.data`, an Ingress
@@ -248,7 +254,7 @@ ingresses:
     name: backend-login
     annotations:
       kubernetes.io/ingress.class: nginx
-      nginx.ingress.kubernetes.io/whitelist-source-range: "{{ .Values.secretsJson.WHITELISTED_IPS }}"
+      nginx.ingress.kubernetes.io/whitelist-source-range: "{{ .Values.secretsJson.WHITELISTED_CIDRS }}"
     hosts:
       - host: "{{ .Values.host }}"
         paths:
